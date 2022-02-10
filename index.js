@@ -1,59 +1,50 @@
 const fs = require('fs')
 
-const resolve = function (path) {
-    var orig = path;
-    var reg = path + '.js';
-    var index = path + '/index.js';
-    return modules[reg] && reg
-        || modules[index] && index
-        || orig;
-};
+const ref = {
+    modules: {},
+    global: {}
+}
 
-const relative = function (parent) {
-    return function (p) {
-        if ('.' != p.charAt(0)) return $require(p);
-        var path = parent.split('/');
-        var segs = p.split('/');
-        path.pop();
+function execScript(path) {
+    const str = fs.readFileSync(path).toString()
+    const {modules, global} = ref
+    const fn = new Function('module', 'require','global', str)
 
-        for (var i = 0; i < segs.length; i++) {
-            var seg = segs[i];
-            if ('..' == seg) path.pop();
-            else if ('.' != seg) path.push(seg);
+    const relative = function (parent) {
+        const resolve = function (path) {
+            var orig = path;
+            var reg = path + '.js';
+            var index = path + '/index.js';
+            return modules[reg] && reg
+                || modules[index] && index
+                || orig;
+        };
+        function require(p) {
+            return modules[resolve(p)];
         }
+        return function (p) {
+            if ('.' != p.charAt(0)) return require(p);
+            var path = parent.split('/');
+            var segs = p.split('/');
+            path.pop();
 
-        return $require(path.join('/'));
+            for (var i = 0; i < segs.length; i++) {
+                var seg = segs[i];
+                if ('..' == seg) path.pop();
+                else if ('.' != seg) path.push(seg);
+            }
+
+            return require(path.join('/'));
+        };
     };
-};
 
-const modules = {}
-
-const register = function (path, fn) {
-    modules[path] = fn;
-};
-
-function $require(p) {
-    var path = resolve(p);
-    var mod = modules[path];
-    return mod.exports;
-}
-
-function execScript(str) {
-    const fn = new Function('module', 'require', str)
     fn.exports = {};
-    fn.call(fn.exports, fn.exports, relative(path));
-    return fn
+    fn.call(fn.exports, fn, relative(path), global);
+    modules[path] = fn.exports
 }
 
-const path = './demo.js'
-
-const jstr = fs.readFileSync(path).toString()
-
-const jstr2 = `const a = require('./demo.js');
-console.log(a)`
-
-register(path, execScript(jstr, path))
-execScript(jstr2)
+execScript('a.js')
+execScript('b/c.js')
 
 
 
